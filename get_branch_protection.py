@@ -38,18 +38,15 @@ def get_git_repos():
     if git is not None:
         try:
             return git.get_user().get_repos()
-            #for repo in git.get_user().get_repos():
-            #    print(repo.name)
         except GithubException as e:
             print("GithubException: {0}".format(e))
     else: 
         print("Error getting git is None")
 
-def import_branch_protection(branch):
-    return_code, stdout, stderr  = terraform.import_cmd('github_branch_protection.feature-extraction-service','feature-extraction-service:master')
+def import_branch_protection(repo):
+    return_code, stdout, stderr  = terraform.import_cmd('github_branch_protection.{}'.format(str(repo)),'{}:master'.format(str(repo)))
     state=terraform.read_state_file()
     return state.__dict__
-
 
 def main():
     print("start")
@@ -57,6 +54,8 @@ def main():
     print(git)
     print("zzz")
     repos = get_git_repos()
+    repo_names = [repo.name for repo in repos]
+    
     for repo in repos:
         print(repo.name)
 
