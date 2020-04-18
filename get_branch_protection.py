@@ -16,7 +16,6 @@ else:
     try:
         git = Github(os.environ['GITHUB_TOKEN'])
         print("Git was successfully set")
-        print(git)
     except GithubException as e:
         print("GithubException: {0}".format(e))
         print("Error connectin to Github ")
@@ -32,7 +31,6 @@ except:
 
 def init_logger():
     logging.basicConfig(filename='importer.log',level=logging.DEBUG)
-
 
 def get_git_repos():
     if git is not None:
@@ -51,13 +49,11 @@ def import_branch_protection(repo):
 def main():
     print("start")
     init_logger()
-    print(git)
-    print("zzz")
+    
     repos = get_git_repos()
     repo_names = [repo.name for repo in repos]
-    
-    for repo in repos:
-        print(repo.name)
+    for repo_name in repo_names:
+        print(repo_name)
 
 
 if __name__ == '__main__':
