@@ -113,7 +113,8 @@ def import_branch_protection(repo, do_import=True, branch="master"):
 
 def main():
     print("start")
-    #init_logger()   
+    #init_logger()
+    terraform.init()
     '''
     repos = get_git_repos()
     repo_names = [repo.name for repo in repos]
