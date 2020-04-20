@@ -3,6 +3,7 @@ import sys
 from github import Github
 from python_terraform import *
 import logging
+import json
 
 current_path = os.path.dirname(os.path.realpath(__file__))
 
@@ -30,43 +31,126 @@ except:
     print("Error initiation Terraform")
     sys.exit(1)
 
-def set_fields(require_signed_commits_contexts, require_signed_commits_strict, require_signed_commits ,enforce_admins, repository, branch="master"):
-    print(  'resource "github_branch_protection" "%s" { \n'
-                '\t repository = "%s" \n'
-                '\t branch = "%s" \n'
-                '\t enforce_admins = %s \n'
-                '\t require_signed_commits = true \n'
-                '\n\n'
-                '\t require_signed_commits { \n'
-                    '\t\t strict   = false \n'
-                    '\t\t contexts = [""] \n'
-                '\t } \n'
-                '\n\n'
-                '\t required_pull_request_reviews { \n'
-                    '\t\t dismiss_stale_reviews = true \n'
-                    '\t\t dismissal_users = [""] \n'
-                    '\t\t dismissal_teams = ["", ""] \n'
-                    '\t\t require_code_owner_reviews = false \n'
-                    '\t\t required_approving_review_count = 1 \n'
-                '\t } \n'
-                '\n\n'
-                '\t restrictions { \n'
-                    '\t\t users = [""] \n'
-                    '\t\t teams = [""] \n'
-                    '\t\t apps = [""] \n'
-                '\t } \n'
-            '}' % (branch, repository, branch ) )
+def set_fields(tfstate):
+
+    #general
+    repository = str(tfstate['resources'][0]['instances'][0]['attributes']['repository'])
+    branch = str(tfstate['resources'][0]['instances'][0]['attributes']['branch'])
+    enforce_admins = str(tfstate['resources'][0]['instances'][0]['attributes']['enforce_admins']).lower()
+    require_signed_commits = str(tfstate['resources'][0]['instances'][0]['attributes']['require_signed_commits']).lower()
+    general = (
+    '\n'
+    '\t repository = "%s" \n'
+    '\t branch = "%s" \n'
+    '\t enforce_admins = %s \n'
+    '\t require_signed_commits = %s \n' % (repository, branch, enforce_admins, require_signed_commits)
+    )
+
+    # Required status check
+    if not tfstate['resources'][0]['instances'][0]['attributes']['required_status_checks']:
+        required_status_checks = ''
+    else:
+        required_status_checks__strict = str(tfstate['resources'][0]['instances'][0]['attributes']['required_status_checks'][0]['strict']).lower() 
+        required_status_checks__contexts = json.dumps(tfstate['resources'][0]['instances'][0]['attributes']['required_status_checks'][0]['contexts'])
+        required_status_checks__include_admins = str(tfstate['resources'][0]['instances'][0]['attributes']['required_status_checks'][0]['include_admins']).lower()
+        required_status_checks = (
+        '\n'
+        '\t required_status_checks { \n'
+        '\t\t strict   = %s \n'
+        '\t\t contexts = %s \n'
+        '\t\t include_admins = %s \n'
+        '\t } \n' % (required_status_checks__strict,
+        required_status_checks__contexts,
+        required_status_checks__include_admins) )
+
+    if not tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews']:
+        required_pull_request_reviews = ''
+    else:
+        required_pull_request_reviews__dismiss_stale_reviews = str(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['dismiss_stale_reviews']).lower()
+        required_pull_request_reviews__dismissal_users = json.dumps(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['dismissal_users'])
+        required_pull_request_reviews__dismissal_teams = json.dumps(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['dismissal_teams'])
+        required_pull_request_reviews__require_code_owner_reviews = str(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['require_code_owner_reviews']).lower()
+        required_pull_request_reviews__required_approving_review_count = str(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['required_approving_review_count'])
+        required_pull_request_reviews = (
+        '\n'
+        '\t required_pull_request_reviews { \n'
+        '\t\t dismiss_stale_reviews = %s \n'
+        '\t\t dismissal_users = %s \n'
+        '\t\t dismissal_teams = %s \n'
+        '\t\t require_code_owner_reviews = %s \n'
+        '\t\t required_approving_review_count = %s \n'
+        '\t } \n' % (required_pull_request_reviews__dismiss_stale_reviews,
+        required_pull_request_reviews__dismissal_users,
+        required_pull_request_reviews__dismissal_teams,
+        required_pull_request_reviews__require_code_owner_reviews,
+        required_pull_request_reviews__required_approving_review_count))
+
+    if not tfstate['resources'][0]['instances'][0]['attributes']['restrictions']:
+        restrictions = ''
+    else:
+        restrictions_checks__users = json.dumps(tfstate['resources'][0]['instances'][0]['attributes']['restrictions'][0]['users'])
+        restrictions_checks__teams = json.dumps(tfstate['resources'][0]['instances'][0]['attributes']['restrictions'][0]['teams'])
+        restrictions__apps = json.dumps(tfstate['resources'][0]['instances'][0]['attributes']['restrictions'][0]['apps']) 
+        restrictions = (
+        '\n'
+        '\t restrictions { \n'
+        '\t\t users = %s \n'
+        '\t\t teams = %s \n'
+        '\t\t apps = %s \n'
+        '\t } \n' % (restrictions_checks__users,
+        restrictions_checks__teams,
+        restrictions__apps))
+
+    if not os.path.exists(current_path + '/output'):
+        os.makedirs(current_path + '/output')
+
+    tf_content = ('resource "github_branch_protection" ' + '"' + str(repository.replace('-', '_')) + '"' + ' { \n'
+                + str(general)
+                + str(required_status_checks)
+                + str(required_pull_request_reviews)
+                + str(restrictions) +
+            '\n}\n')
+
+    f = open(current_path + '/output/' + str(repository.replace('-', '_')) + '.tf', "w")
+    f.write(tf_content)
+    f.close()
 
 def read_tfstate_file(repo):
     tfstate = import_branch_protection(repo)
+
     print ("enforce_admins: " + str(tfstate['resources'][0]['instances'][0]['attributes']['enforce_admins']).lower())
     print ("branch: " + str(tfstate['resources'][0]['instances'][0]['attributes']['branch']))
     print ("repository: " + str(tfstate['resources'][0]['instances'][0]['attributes']['repository']) )
     print ("require_signed_commits: " + str(tfstate['resources'][0]['instances'][0]['attributes']['require_signed_commits']).lower())
-    print ("required_pull_request_reviews.dismiss_stale_reviews: " + str(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['dismiss_stale_reviews']).lower())
-    print ("required_pull_request_reviews.include_admins: " + str(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['include_admins']).lower())
-    print ("required_pull_request_reviews.require_code_owner_reviews: " + str(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['require_code_owner_reviews']).lower())
-    print ("required_pull_request_reviews.required_approving_review_count: " + str(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['required_approving_review_count']))
+    # required_pull_request_reviews
+    if not tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews']:
+        print ("required_pull_request_reviews: []")
+    else:
+        print ("required_pull_request_reviews.include_admins: " + str(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['include_admins']).lower())
+        print ("required_pull_request_reviews.require_code_owner_reviews: " + str(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['require_code_owner_reviews']).lower())
+        print ("required_pull_request_reviews.required_approving_review_count: " + str(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['required_approving_review_count']))
+        print ("required_pull_request_reviews.dismiss_stale_reviews: " + str(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['dismiss_stale_reviews']).lower())
+        print ("required_pull_request_reviews.dismissal_users: " +  json.dumps(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['dismissal_users']))
+        print ("required_pull_request_reviews.dismissal_teams: " +  json.dumps(tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews'][0]['dismissal_teams']))
+
+    # required_status_checks
+    if not tfstate['resources'][0]['instances'][0]['attributes']['required_status_checks']:
+        print("required_status_checks: []")
+    else:
+        print ( "required_status_checks.contexts: " + json.dumps(tfstate['resources'][0]['instances'][0]['attributes']['required_status_checks'][0]['contexts']) )
+        print ( "required_status_checks.include_admins: " + str(tfstate['resources'][0]['instances'][0]['attributes']['required_status_checks'][0]['include_admins']).lower() )
+        print ( "required_status_checks.strict: " + str(tfstate['resources'][0]['instances'][0]['attributes']['required_status_checks'][0]['strict']).lower() )
+
+    # restrictions
+    if not tfstate['resources'][0]['instances'][0]['attributes']['restrictions']:
+        print("restrictions: []")
+    else:
+        print ("restrictions.apps :" + json.dumps(tfstate['resources'][0]['instances'][0]['attributes']['restrictions'][0]['apps']) )
+        print ("restrictions.teams :" +  json.dumps(tfstate['resources'][0]['instances'][0]['attributes']['restrictions'][0]['teams']) )
+        print ("restrictions.users :" +  json.dumps(tfstate['resources'][0]['instances'][0]['attributes']['restrictions'][0]['users']) )
+
+    set_fields(tfstate)
+
 
 def init_logger():
     logging.basicConfig(filename='importer.log',level=logging.DEBUG)
@@ -121,10 +205,11 @@ def main():
     for repo_name in repo_names:
         print(repo_name)
     '''
-
-    create_resource_file_for_importing("feature-extraction-service")
-    #print (import_branch_protection(repo="feature-extraction-service", do_import=True) )
-    read_tfstate_file("feature-extraction-service")
+    #repo_name = "omer-test"
+    repo_name = "feature-extraction-service"
+    create_resource_file_for_importing(repo_name)
+    #print (import_branch_protection(repo=repo_name, do_import=True) )
+    read_tfstate_file(repo_name)
 
     delete_resource_file_for_importing()
 
