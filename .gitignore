@@ -1,0 +1,5 @@
+.terraform/
+importer.log
+git_branch_protection.tf
+output
+branch_protection_status.log

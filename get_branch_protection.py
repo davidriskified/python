@@ -52,16 +52,16 @@ def set_fields(tfstate):
     else:
         required_status_checks__strict = str(tfstate['resources'][0]['instances'][0]['attributes']['required_status_checks'][0]['strict']).lower() 
         required_status_checks__contexts = json.dumps(tfstate['resources'][0]['instances'][0]['attributes']['required_status_checks'][0]['contexts'])
-        required_status_checks__include_admins = str(tfstate['resources'][0]['instances'][0]['attributes']['required_status_checks'][0]['include_admins']).lower()
+        #required_status_checks__include_admins = str(tfstate['resources'][0]['instances'][0]['attributes']['required_status_checks'][0]['include_admins']).lower()
         required_status_checks = (
         '\n'
         '\t required_status_checks { \n'
         '\t\t strict   = %s \n'
         '\t\t contexts = %s \n'
-        '\t\t include_admins = %s \n'
+        #'\t\t include_admins = %s \n'
         '\t } \n' % (required_status_checks__strict,
-        required_status_checks__contexts,
-        required_status_checks__include_admins) )
+        required_status_checks__contexts))
+        #, required_status_checks__include_admins) )
 
     if not tfstate['resources'][0]['instances'][0]['attributes']['required_pull_request_reviews']:
         required_pull_request_reviews = ''
@@ -168,7 +168,7 @@ def create_resource_file_for_importing(repo):
     f = open("git_branch_protection.tf", "w")
     f.write('resource "github_branch_protection" "%s" { \n'
                 '\t repository     = "%s"\n'
-            '}\n' % (str(repo), str(repo)))
+            '}\n' % (str(repo.replace('-','_')), str(repo)))
     f.close()
 
 def delete_resource_file_for_importing(cleanup = True):
@@ -182,7 +182,7 @@ def import_branch_protection(repo, do_import=True, branch="master"):
         sys.exit(1)
     try:
         if do_import:
-            resource = 'github_branch_protection.{}'.format(str(repo))
+            resource = 'github_branch_protection.{}'.format(str(repo.replace('-','_')))
             repo_and_branch = '{}:{}'.format(str(repo),str(branch))
             return_code, stdout, stderr  = terraform.import_cmd(resource, repo_and_branch)
             if return_code != 0:
@@ -195,23 +195,64 @@ def import_branch_protection(repo, do_import=True, branch="master"):
     return terraform.tfstate.__dict__
 
 
-def main():
-    print("start")
-    #init_logger()
-    terraform.init()
-    '''
-    repos = get_git_repos()
-    repo_names = [repo.name for repo in repos]
-    for repo_name in repo_names:
-        print(repo_name)
-    '''
+def testing():
+    #repo_name = "chef"
     #repo_name = "omer-test"
     repo_name = "feature-extraction-service"
     create_resource_file_for_importing(repo_name)
-    #print (import_branch_protection(repo=repo_name, do_import=True) )
     read_tfstate_file(repo_name)
-
     delete_resource_file_for_importing()
+
+# Preperation:
+#   1. Install the follwing packages:
+#       pip install python-terraform
+#       pip install PyGithub
+#   2. Create the github.ft with the proprer GITHUB_TOKEN
+#       provider "github" {
+#           token        = "${var.github_token}"
+#           organization = "${var.github_organization}"
+#       }
+#   3. terraform init
+# Run:
+#   GITHUB_TOKEN="XXXXXXXXXXX" python2.7 get_branch_protection.py
+# Outout:
+#   terrafom branch protection files will be under the directory output
+# Testing:
+#   Import some branch protections using terraform import and test by perform terraform apply
+#   For example:
+#   If we take the repository name: feature-extraction-service
+#   1. Create terraform file import.tf with the follwing:
+#       resource "github_branch_protection" "feature_extraction_service" {
+#           repository     = "master"
+#       }
+#   2. Import the branch permission to ftstate by:
+#       terraform import github_branch_protection.feature_extraction_service feature-extraction-service:master
+#   3. Test to see no drifts by:
+#       terraform apply
+
+def main():
+    print("Start importing")
+    #init_logger()
+    terraform.init()
+    f = open(current_path + "/branch_protection_status.log", "w")
+
+    repos = get_git_repos()
+    for repo in repos:
+        try:
+            branch = repo.get_branch("master")
+        except:
+            f.write("Fail getting branch master for repository %s\n" % (repo.name))
+            continue
+        if branch.protected:
+            f.write("Branch master of repository %s is protected\n" % (repo.name))
+            create_resource_file_for_importing(repo.name)
+            read_tfstate_file(repo.name)
+            delete_resource_file_for_importing()
+        else:
+            f.write("Branch master of repository %s is NOT protected\n" % (repo.name))
+
+    f.close()
+    print("End importing")
 
 if __name__ == '__main__':
     main()
