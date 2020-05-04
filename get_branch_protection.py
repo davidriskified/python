@@ -236,8 +236,15 @@ def main():
     terraform.init()
     f = open(current_path + "/branch_protection_status.log", "w")
 
+    with open("excluded_repos.txt") as k:
+        excluded_repos = k.readlines()
+    excluded_repos = [x.strip() for x in excluded_repos]
+
     repos = get_git_repos()
     for repo in repos:
+        if repo.name in excluded_repos:
+            f.write("Repository %s is excluded from importing\n" % (repo.name))
+            continue
         try:
             branch = repo.get_branch("master")
         except:
